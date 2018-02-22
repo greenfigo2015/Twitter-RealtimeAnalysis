@@ -1,3 +1,7 @@
+from pubnub.callbacks import SubscribeCallback
+from pubnub.enums import PNOperationType, PNStatusCategory
+from pubnub.pnconfiguration import PNConfiguration
+from pubnub.pubnub import PubNub
 import sys
 import nltk
 import re
@@ -16,14 +20,16 @@ from textstat.textstat import *
 
 
 #Change Folder Path here 
-raw_data_path = "/Users/ritiztambi/Twitter-RealtimeAnalysis-Pubnub"  
+raw_data_path = "/Users/ritiztambi/repos/Twitter-RealtimeAnalysis-Pubnub"  
 os.chdir(raw_data_path)
     
-
-df = pd.read_csv('data/labeled_data.csv')
-df1= pd.read_csv('data/labeled_data_test.csv',error_bad_lines=False)
+#Creating dataframes
+df = pd.read_csv('data/labeled_data.csv',error_bad_lines=False)
+df1= pd.read_csv('data/labeled_data_validate.csv',error_bad_lines=False)
+df2= pd.read_csv('data/labeled_test.csv',error_bad_lines=False)
 tweets_train=df.tweet
-tweets_test=df1.tweet
+tweets_validate=df1.tweet
+tweets_test=df2.tweet
 
 
 #stopwords for training
@@ -182,8 +188,10 @@ def get_features_test(tweets):
 """ Get Train featureSet, Test featureSet, Train topic class and Test topic class  """    
 X_train = pd.DataFrame(get_features_train(tweets_train))
 y_train = df['class'].astype(int)
+X_validate =  pd.DataFrame(get_features_test(tweets_validate))
+y_validate =  df1['class'].astype(int)
 X_test =  pd.DataFrame(get_features_test(tweets_test))
-y_test =  df1['class'].astype(int)
+y_test =  df2['class'].astype(int)
 
 
 number_of_classes=3
@@ -191,13 +199,15 @@ input_dimention = X_train.shape[1]
 
 #Convert class vector to binary class matrix.
 onehot_train = np_utils.to_categorical(y_train, number_of_classes)  
-#Convert class vector to binary class matrix. 
-onehot_test = np_utils.to_categorical(y_test, number_of_classes)     
+onehot_validate = np_utils.to_categorical(y_validate, number_of_classes)  
+onehot_test =   np_utils.to_categorical(y_test, number_of_classes)  
 
 print('tweet_train shape:', X_train.shape)
-print('tweet_test shape:', X_test.shape)
-print('tweet_train shape:', onehot_train.shape)
-print('tweet_test shape:', onehot_test.shape)
+print('tweet_validate shape:', X_validate.shape)
+print('tweet_test shape:', onehot_train.shape)
+print('tweet_train_class shape:', onehot_train.shape)
+print('tweet_validate_class shape:', onehot_validate.shape)
+print('tweet_test_class shape:', onehot_test.shape)
 
 
 """ Define model """
@@ -208,6 +218,8 @@ model.add(Dense(number_of_classes,activation='softmax'))
 model.compile(loss='categorical_crossentropy', optimizer='rmsprop', metrics=['accuracy'])
 
 print("Training model")
-model.fit(X_train, onehot_train, epochs=1, batch_size=32)
+model.fit(X_train, onehot_train, epochs=10, batch_size=32,validation_data=(X_validate,onehot_validate))
 print("Generating test Predictions, Accuracy")
 predited_topics = model.predict_classes(X_test)
+accuracy_of_test = accuracy_score(y_test, predited_topics)
+print ('Accuracy is ',accuracy_of_test*100,'%')
