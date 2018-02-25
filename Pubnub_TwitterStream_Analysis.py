@@ -1,7 +1,8 @@
 from pubnub.callbacks import SubscribeCallback
-from pubnub.enums import PNOperationType, PNStatusCategory
+from pubnub.enums import PNOperationType, PNStatusCategory, PNReconnectionPolicy
 from pubnub.pnconfiguration import PNConfiguration
-from pubnub.pubnub import PubNub
+from pubnub.pubnub import PubNub, SubscribeListener
+from pubnub.exceptions import PubNubException
 import sys
 import nltk
 import re
@@ -17,7 +18,24 @@ from keras.utils import np_utils
 from keras.models import Sequential
 from keras.layers.core import Dense, Dropout, Activation
 from textstat.textstat import *
+import json
 
+
+
+pn_twitter_config = PNConfiguration()
+pn_twitter_config.subscribe_key = 'sub-c-78806dd4-42a6-11e4-aed8-02ee2ddab7fe'
+pn_twitter_config.reconnect_policy = PNReconnectionPolicy.EXPONENTIAL
+pubnub_twitter = PubNub(pn_twitter_config)
+
+pn_config = PNConfiguration()
+pn_config.subscribe_key = 'sub-c-93679206-1202-11e8-bb84-266dd58d78d1'
+pn_config.publish_key = 'pub-c-44842793-32df-4b69-b576-4495abcf64ec'
+pubnub_personal = PubNub(pn_config)
+
+
+
+#TF hack
+os.environ['TF_CPP_MIN_LOG_LEVEL'] = '2'
 
 #Change Folder Path here 
 raw_data_path = "/Users/ritiztambi/repos/Twitter-RealtimeAnalysis-Pubnub"  
@@ -40,7 +58,6 @@ stopwords.extend(other_exclusions)
 
 stemmer = PorterStemmer()
 sentiment_analyzer = VS()
-
 
 
 def preprocess(tweet):
@@ -219,7 +236,7 @@ model.add(Dense(number_of_classes,activation='softmax'))
 model.compile(loss='categorical_crossentropy', optimizer='rmsprop', metrics=['accuracy'])
 
 print("Training model")
-model.fit(X_train, onehot_train, epochs=10, batch_size=32,validation_data=(X_validate,onehot_validate))
+model.fit(X_train, onehot_train, epochs=1, batch_size=32,validation_data=(X_validate,onehot_validate))
 print("Generating test Predictions, Accuracy")
 predited_topics = model.predict_classes(X_test)
 accuracy_of_test = accuracy_score(y_test, predited_topics)
@@ -276,24 +293,35 @@ def my_publish_callback(envelope, status):
     if not status.is_error():
         pass  # Message successfully published to specified channel.
     else:
-        pass  # Handle message publish error. Check 'category' property to find out possible issue
-        # because of which request did fail.
-        # Request can be resent using: [status retry];
+        pass  
 
 
 
 class TwitterSubscribeCallback(SubscribeCallback):
 
    
+    count = 0
+    
     #Initializing bucket
     bucket = {}
     bucket['neither']=0
     bucket['offensive']=0
     bucket['hate_speech']=0
-    count = 0
-   
+    
+    total_sentiment = 0
+    
+    #Initializing sentiment bucket
+    bucket_sentiment={}
+    bucket_sentiment['negative']=0
+    bucket_sentiment['positive']=0
+    bucket_sentiment['neutral']=0
+    
+    Eon={}
+
   
     def populate_bucket(self,topic):
+        """This function populates the text-analysis bucket with each 
+           incoming tweet"""
         if topic == 'neither':
             self.bucket['neither']+=1
         elif topic == 'offensive':
@@ -301,6 +329,15 @@ class TwitterSubscribeCallback(SubscribeCallback):
         else:
             self.bucket['hate_speech']+=1
         
+    def populate_sentiment(self,sentiment):
+        """This function populates the sentiment-analysis bucket with each 
+           incoming tweet"""
+        if sentiment == 'neutral':
+            self.bucket_sentiment['neutral']+=1
+        elif sentiment == 'negative':
+            self.bucket_sentiment['negative']+=1
+        else:
+            self.bucket_sentiment['positive']+=1
     
     
     def presence(self, pubnub, presence):
@@ -309,62 +346,105 @@ class TwitterSubscribeCallback(SubscribeCallback):
     
     def status(self, pubnub, status):
         if status.category == PNStatusCategory.PNUnexpectedDisconnectCategory:
-            pass  # This event happens when radio / connectivity is lost 
+             # This event happens when radio / connectivity is lost 
+            print("Retrying")
+            pubnub.reconnect()
+           
         elif status.category == PNStatusCategory.PNConnectedCategory:
-            # Connect event. You can do stuff like publish, and know you'll get it.
-            # Or just use the connected event to confirm you are subscribed for
-            # UI / internal notifications, etc
+            # Connect event.
+            print('Hello')
             pass
         elif status.category == PNStatusCategory.PNReconnectedCategory:
+            # This event happens when radio / connectivity is lost
+            print("Reconnected")
             pass
-            # Happens as part of our regular operation. This event happens when
-            # radio / connectivity is lost, then regained.
-        elif status.category == PNStatusCategory.PNDecryptionErrorCategory:
-            pass
-            # Handle message decryption error. Probably client configured to
-            # encrypt messages and on live data feed it received plain text.
+            
 
 
     # Where we filter tweets and publish for sentiment analysis
     def message(self, pubnub, message):
-        '''  sleep(90)
-        print(message.message['text'])
-        sys.exit()
-        quit()'''
-        if self.count<100:
             tweet=message.message['text']
+            #get tweet language and process further only if 
             language=get_lang(tweet)
             if(language == 'english'):
                 cls=predict_topic(tweet)
                 self.populate_bucket(cls)
                 tweet=clean_tweet(tweet)
                 sentiment=get_tweet_sentiment(tweet)
+                self.total_sentiment+=1;
+                self.populate_sentiment(sentiment) 
+                try:
+
+                    pubnub_personal.publish().channel("sentiment_channel").message({
+                        'positive': self.bucket_sentiment['positive']/self.total_sentiment,
+                        'negative': self.bucket_sentiment['negative']/self.total_sentiment,
+                        'neutral' : self.bucket_sentiment['neutral']/self.total_sentiment
+                    }).async(my_publish_callback)
+    
+                    pubnub_personal.publish().channel("topic_channel").message({
+                        'neither': self.bucket['neither'],
+                        'offensive': self.bucket['offensive'],
+                        'hate_speech' : self.bucket['hate_speech']
+                    }).async(my_publish_callback)
+                   
+                except PubNubException as e:
+                    print(e)
             else:
                 pass
             self.count=self.count+1
-        else:
-            print(self.bucket)
-            sys.exit()
-          
+    
 
           #  pubnubPersonal.publish().channel("sentiment-analysis").message({"session_id":self.session_Id,"text":message.message['text']}).async(my_publish_callback)
        
         
 
+class MySubscribeCallback(SubscribeCallback):
+
+    
+    def presence(self, pubnub, presence):
+        pass  # handle incoming presence data
+ 
+    
+    def status(self, pubnub, status):
+        if status.category == PNStatusCategory.PNUnexpectedDisconnectCategory:
+             # This event happens when radio / connectivity is lost 
+            print("Retrying")
+            pubnub.reconnect()
+           
+        elif status.category == PNStatusCategory.PNConnectedCategory:
+            # Connect event.
+            print('Hello Personal')
+            pass
+        elif status.category == PNStatusCategory.PNReconnectedCategory:
+            # This event happens when radio / connectivity is lost
+            print("Reconnected")
+            pass
+            
+
+
+    # Where we filter tweets and publish for sentiment analysis
+    def message(self, pubnub, message):        
+            if message.message == 'start':
+                pubnub_twitter.subscribe().channels('pubnub-twitter').execute()
+            elif message.message == 'stop':
+                pubnub_twitter.unsubscribe().channels('pubnub-twitter').execute()  
         
-def main():
-    pnconfig = PNConfiguration()
-    pnconfig.publish_key = 'pub-c-44842793-32df-4b69-b576-4495abcf64ec'
-    pnconfig.subscribe_key = 'sub-c-78806dd4-42a6-11e4-aed8-02ee2ddab7fe'
-    pubnub = PubNub(pnconfig)
-    pubnub.add_listener(TwitterSubscribeCallback())
-    pubnub.subscribe().channels('pubnub-twitter').execute()
-    print(list)
+
+        
+
+
+pubnub_twitter.add_listener(TwitterSubscribeCallback())
+pubnub_personal.add_listener(MySubscribeCallback())
+pubnub_personal.subscribe().channels('start-stop').execute()
+
+
+
+
+
+
     
 
  
-if __name__ == "__main__":
-    # calling main function
-    main()
+
  
 

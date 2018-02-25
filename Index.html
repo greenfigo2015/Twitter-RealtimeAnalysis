@@ -1,0 +1,186 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <title>Exercise 1</title>
+    <script type="text/javascript" src="https://pubnub.github.io/eon/v/eon/1.0.0/eon.js"></script>
+    <link type="text/css" rel="stylesheet" href="https://pubnub.github.io/eon/v/eon/1.0.0/eon.css" />
+    <style type="text/css">
+        html, body { margin: 0; }
+        /* #chart {
+            position: absolute;
+            top:0;
+            bottom:0;
+            left:0;
+            right:0; */
+        /* }
+        .c3 svg {
+            font: bold 20px sans-serif;
+        }
+        .c3-chart-line path {
+            stroke-width: 10px;
+            stroke-linecap: round;
+        } */
+        .chart{
+          display: flex;
+          margin-top: 4rem;
+          flex-wrap: wrap;
+        }
+        #chart1{
+          width:50%;
+        }
+        #chart2{
+          width:50%;
+        }
+        #chart3{
+          width:50%;
+        }
+        #chart4{
+          width:50%;
+        }
+        .c3-axis-x .tick{
+          visibility: hidden;
+        }
+        .buttons{
+          display: flex;
+          justify-content: center;
+        }
+        .start{
+          background: lightgreen;
+          padding: 0.5rem;
+          border-radius: 0.5rem;
+        }
+        .stop{
+          background: lightcoral;
+          padding: 0.5rem;
+          border-radius: 0.5rem;
+          margin-left: 5rem;
+        }
+        .start:hover{
+          cursor: pointer;
+        }
+        .stop:hover{
+          cursor: pointer;
+        }
+    </style>
+</head>
+<body>
+
+<div class="chart">
+  <div id="chart1"></div>
+  <div id="chart2"></div>
+  <div id="chart3"></div>
+  <div id="chart4"></div>
+</div>
+<div class="buttons">
+  <div class="start" onclick="start()">Start</div>
+  <div class="stop" onclick="stop()">Stop</div>
+</div>
+<script type="text/javascript">
+
+var pubnub = new PubNub({
+    publishKey   : "pub-c-44842793-32df-4b69-b576-4495abcf64ec",
+    subscribeKey : "sub-c-93679206-1202-11e8-bb84-266dd58d78d1"
+});
+
+
+eon.chart({
+    channels: ["sentiment_channel"],
+    generate: {
+        bindto: '#chart1',
+        data: {
+            type:'spline',
+            colors: {
+                positive:'#8fdc35',
+                negative:'#ff4606',
+                neutral:'#555643'
+            },
+            names: {
+                positive: "POSITIVE",
+                negative: "NEGATIVE",
+                neutral: "NEUTRAL"
+            }
+        },
+        axis: {
+            x: {
+                type: 'category' // this needed to load string x value
+            }
+        },
+        tooltip: {
+            show: true
+        }
+    },
+    history:false,
+    pubnub: pubnub,
+    transform: function(m) {
+        return { eon: m}
+      },
+    limit: 100,
+});
+
+
+eon.chart({
+    channels: ["topic_channel"],
+    generate: {
+        bindto: '#chart2',
+        data: {
+            labels: true,
+            type:'donut'
+        },
+        tooltip: {
+            show: true
+        }
+    },
+    history:false,
+    pubnub: pubnub,
+    transform: function(m) {
+        return { eon: m}
+      },
+    limit: 100,
+});
+
+eon.chart({
+    channels: ["topic_channel"],
+    generate: {
+        bindto: '#chart4',
+        data: {
+            labels: true,
+            type:'bar'
+        },
+        bar: {
+            width: {
+              ratio: 0.5
+            }
+        },
+        tooltip: {
+            show: true
+        }
+    },
+    history:false,
+    pubnub: pubnub,
+    transform: function(m) {
+      let msg={neither:m.neither, offensive:m.offensive, hate_speech:m.hate_speech}
+        return {eon:msg}
+      },
+    limit: 1,
+});
+
+function start(e){
+  pubnub.publish({
+    channel   : 'start-stop',
+    message   : "start",
+});
+}
+
+function stop(e){
+  pubnub.publish({
+    channel   : 'start-stop',
+    message   : "stop",
+});
+
+}
+
+</script>
+
+</body>
+</html>
