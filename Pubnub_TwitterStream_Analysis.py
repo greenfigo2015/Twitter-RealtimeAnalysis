@@ -18,8 +18,9 @@ from keras.utils import np_utils
 from keras.models import Sequential
 from keras.layers.core import Dense, Dropout, Activation
 from textstat.textstat import *
+from keras.models import load_model
 import json
-
+from keras.models import model_from_json
 
 
 pn_twitter_config = PNConfiguration()
@@ -198,9 +199,7 @@ def get_features_test(tweets):
     tfidf = vectorizer.transform(tweets).toarray()
     M = np.concatenate([tfidf,feats],axis=1)
     return M
-
-
-    
+   
 
 
 """ Get Train featureSet, Test featureSet, Train topic class and Test topic class  """    
@@ -236,11 +235,13 @@ model.add(Dense(number_of_classes,activation='softmax'))
 model.compile(loss='categorical_crossentropy', optimizer='rmsprop', metrics=['accuracy'])
 
 print("Training model")
-model.fit(X_train, onehot_train, epochs=1, batch_size=32,validation_data=(X_validate,onehot_validate))
+model.fit(X_train, onehot_train, epochs=10, batch_size=32,validation_data=(X_validate,onehot_validate))
 print("Generating test Predictions, Accuracy")
 predited_topics = model.predict_classes(X_test)
 accuracy_of_test = accuracy_score(y_test, predited_topics)
 print ('Accuracy is ',accuracy_of_test*100,'%')
+
+
     
 def predict_topic(tweet):
     """This function takes a tweet and returns the predicted class as . 
@@ -352,7 +353,7 @@ class TwitterSubscribeCallback(SubscribeCallback):
            
         elif status.category == PNStatusCategory.PNConnectedCategory:
             # Connect event.
-            print('Hello')
+            print("Streaming Tweets")
             pass
         elif status.category == PNStatusCategory.PNReconnectedCategory:
             # This event happens when radio / connectivity is lost
@@ -378,7 +379,8 @@ class TwitterSubscribeCallback(SubscribeCallback):
                     pubnub_personal.publish().channel("sentiment_channel").message({
                         'positive': self.bucket_sentiment['positive']/self.total_sentiment,
                         'negative': self.bucket_sentiment['negative']/self.total_sentiment,
-                        'neutral' : self.bucket_sentiment['neutral']/self.total_sentiment
+                        'neutral' : self.bucket_sentiment['neutral']/self.total_sentiment,
+                        'total'   : self.total_sentiment
                     }).async(my_publish_callback)
     
                     pubnub_personal.publish().channel("topic_channel").message({
@@ -413,7 +415,6 @@ class MySubscribeCallback(SubscribeCallback):
            
         elif status.category == PNStatusCategory.PNConnectedCategory:
             # Connect event.
-            print('Hello Personal')
             pass
         elif status.category == PNStatusCategory.PNReconnectedCategory:
             # This event happens when radio / connectivity is lost

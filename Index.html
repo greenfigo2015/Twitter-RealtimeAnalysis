@@ -113,7 +113,8 @@ eon.chart({
     history:false,
     pubnub: pubnub,
     transform: function(m) {
-        return { eon: m}
+       let msg={positive:m.positive, negative:m.negative, neutral:m.neutral}
+        return { eon: msg}
       },
     limit: 100,
 });
@@ -138,7 +139,36 @@ eon.chart({
       },
     limit: 100,
 });
-
+eon.chart({
+    channels: ["sentiment_channel"],
+    generate: {
+        bindto: '#chart3',
+        data: {
+            labels: true,
+            type:'bar',
+            colors: {
+                positive:'#8fdc35',
+                negative:'#ff4606',
+                neutral:'#555643'
+            }
+        },
+        bar: {
+            width: {
+              ratio: 0.5
+            }
+        },
+        tooltip: {
+            show: true
+        }
+    },
+    history:false,
+    pubnub: pubnub,
+    transform: function(m) {
+      let msg={positive:m.positive*m.total, negative:m.negative*m.total, neutral:m.neutral*m.total}
+        return {eon:msg}
+      },
+    limit: 1,
+});
 eon.chart({
     channels: ["topic_channel"],
     generate: {
