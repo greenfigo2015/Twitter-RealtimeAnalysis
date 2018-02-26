@@ -35,4 +35,3 @@ A SnapShot of model training.
 - Pubnub
 - nltk
 - vaderSentiment
-
