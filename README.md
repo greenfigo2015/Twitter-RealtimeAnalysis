@@ -1,4 +1,4 @@
-# Twitter-RealtimeAnalysis-Pubnub
+# Twitter-RealtimeAnalysis-NeuralNetwork
 Sentiment Analysis is an application of opinion mining. It is the process of ‘computationally’ determining whether a piece of writing is positive, negative or neutral to derive the opinion or attitude of a speaker. In the twitter age, where social and commercial interactions have majorly shifter to platforms like twitter, sentiment analysis becomes an inquisitive tool for marketing firms and well for socialogists. Twitter also serves as major platform for any user to express his/her opinions. While, this is healthy for an opionated, politically active generation,a lot of tweets have a hate_speech/racist/offensive element in them.
 
 This project uses PubNub's twitter data stream to analyse user sentiment and the share of hateful,offensive tweets in realtime. For sentiment analysis, Vader Sentiment (Valence Aware Dictionary and sEntiment Reasoner), a simple rule based model is used. 
